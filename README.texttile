@@ -76,6 +76,12 @@ bc.  include Exports
 
 This will make file named sold_out.csv in @RAILS_ROOT/tmp@.
 
+Or perhaps even simpler
+
+bc.  export = CardsExport.new( :file => "all" ) { Cards.all }
+  export.run
+
+
 To send the file to the user, just
 
 bc.  return send_file(export.file, :type => "text/csv")

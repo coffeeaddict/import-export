@@ -144,6 +144,8 @@ module ImportExport
         throw "Need a filename to make an export"
       end
 
+      @objects = yield if block_given?
+
       @col_sep ||= ";"
       @row_sep ||= "\r\n"
     end
@@ -167,7 +169,7 @@ module ImportExport
           csv << self.header
         end
 
-        @objects.each { |customer|
+        @objects.each { |object|
           values = self.export(object)
           # make sure the nil values are ""
           values.collect! { |i| i.nil? ? "" : i }
@@ -190,9 +192,7 @@ module ImportExport
     #   }
     #
     def collect
-      if block_given?
-        @objects = yield
-      end
+      @objects = yield if block_given?
     end
 
     alias :run :perform
