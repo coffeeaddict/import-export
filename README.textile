@@ -16,6 +16,9 @@ To make a thingy that imports cards:
 in @lib/imports.rb@
 
 bc..  module Imports
+
+    include ImportExport
+
     class CardsImport
       def import(row)
   
@@ -55,6 +58,9 @@ To make something export
 in @lib/exports.rb@
 
 bc.  module Exports
+
+    include ImportExport
+
     class CardsExport
       def header
         [ "NAME", "IMAGE", "COLOR" ]
