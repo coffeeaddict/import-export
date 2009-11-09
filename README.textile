@@ -33,6 +33,14 @@ bc..  module Imports
         }
    
         card.save
+  
+        if card.invalid?
+          # writes the row to "file.csv.errors"
+          log_error row
+        else
+          # writes the message to "file.csv.log"
+          log card.name + " saved"
+        end
       end
     end
   end
@@ -55,21 +63,31 @@ h2. Example Export
 
 To make something export
 
-in @lib/exports.rb@
+in @app/model/cards_exports.rb@
 
-bc.  module Exports
-
-    include ImportExport
-
-    class CardsExport
-      def header
-        [ "NAME", "IMAGE", "COLOR" ]
-      end
-      def export(card)
-        return card.attributes.values_at("name", "image", "color")
-      end
+bc. include ImportExport
+  
+  class CardsExport < Export
+    before_export :setup
+    after_export :extra_info
+  
+    def setup
+      @col_sep = ","
+      @row_sep = "\n"
+    end
+  
+    def extra_info
+      log "stuff has been exported"
+    end
+  
+    def header
+      [ "NAME", "IMAGE", "COLOR" ]
+    end
+    def export(card)
+      return card.attributes.values_at("name", "image", "color")
     end
   end
+  
 
 in your controller
 
@@ -91,6 +109,31 @@ bc.  export = CardsExport.new( :file => "all" ) { Cards.all }
 To send the file to the user, just
 
 bc.  return send_file(export.file, :type => "text/csv")
+
+
+h2. Options
+
+ * @:col_sep@ => The column seperator, defaults to @";"@
+ * @:row_sep@ => The row seperator, defaults to @"\r\n"@
+ * @:file@    => The name of the file import / export
+
+h3. Import specific options
+
+ * @:use_headers@ => Flag to use the first row as a header. The contents of the first row will not be included in the import.
+
+h3. Export specific options
+
+No specific options, but some quirks exist
+
+h2. Import files
+
+The import process makes a number of files next to the actual data file
+
+ * file.done : touched when the import is all done
+ * file.count : filled with the current line nr.
+ * file.errors : filled rows you send to log_error()
+ * file.log : filled with comments you placed in log
+
 
 
 Copyright (c) 2009 Hartog C. de Mik, released under the MIT license
