@@ -1,4 +1,4 @@
-h1. ImportExport
+!h1. ImportExport
 
 
 A generic import and export plugin for rails, own implementation is required
@@ -23,7 +23,7 @@ bc..  module Imports
 
     include ImportExport
 
-    class CardsImport
+    class CardsImport < Importer
       def import(row)
   
         # Card is an ActiveRecord
@@ -62,6 +62,9 @@ Or for Delayed::Job (who needs imports right away?)
 
 run is an alias for perform, so this will work out of the box
 
+The ImportExport module publishes the Importer (abstract) class into
+your name space.
+
 
 h2. Example Export 
 
@@ -71,7 +74,7 @@ in @app/model/cards_exports.rb@
 
 bc..   include ImportExport
   
-  class CardsExport < Export
+  class CardsExport < Exporter
     before_export :setup
     after_export :extra_info
   
@@ -114,6 +117,9 @@ bc..   export = CardsExport.new( :file => "all" ) { Cards.all }
 To send the file to the user, just
 
 @return send_file(export.file, :type => "text/csv")@
+
+The ImportExport module publishes the Importer (abstract) class into
+your name space.
 
 
 h2. Options
