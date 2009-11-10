@@ -5,8 +5,12 @@ A generic import and export plugin for rails, own implementation is required
 
 h2. Dependencies
 
-
 * FasterCSV
+
+
+h2. Install
+
+@./script/plugin install git://github.com/coffeeaddict/import-export.git@
 
 
 h2. Example Import 
@@ -54,7 +58,7 @@ bc.  include Imports
 
 Or for Delayed::Job (who needs imports right away?)
 
-  Delayed::Job.enqueue CardsImport.new('/path/to/file.csv')
+@Delayed::Job.enqueue CardsImport.new('/path/to/file.csv')@
 
 run is an alias for perform, so this will work out of the box
 
@@ -65,7 +69,7 @@ To make something export
 
 in @app/model/cards_exports.rb@
 
-bc. include ImportExport
+bc..   include ImportExport
   
   class CardsExport < Export
     before_export :setup
@@ -83,6 +87,7 @@ bc. include ImportExport
     def header
       [ "NAME", "IMAGE", "COLOR" ]
     end
+  
     def export(card)
       return card.attributes.values_at("name", "image", "color")
     end
@@ -91,8 +96,8 @@ bc. include ImportExport
 
 in your controller
 
-bc.  include Exports
-  ...
+bc..   include Exports
+  
   # export all sold out cards
   export = CardsExport.new( :col_sep => '|', :file => "sold_out" )
   export.collect { Cards.find(:all, :conditions => [ "sold_out=?", true ]) }
@@ -102,13 +107,13 @@ This will make file named sold_out.csv in @RAILS_ROOT/tmp@.
 
 Or perhaps even simpler
 
-bc.  export = CardsExport.new( :file => "all" ) { Cards.all }
+bc..   export = CardsExport.new( :file => "all" ) { Cards.all }
   export.run
 
 
 To send the file to the user, just
 
-bc.  return send_file(export.file, :type => "text/csv")
+@return send_file(export.file, :type => "text/csv")@
 
 
 h2. Options
@@ -125,15 +130,21 @@ h3. Export specific options
 
 No specific options, but some quirks exist
 
-h2. Import files
+
+h2. Extra files
 
 The import process makes a number of files next to the actual data file
 
- * file.done : touched when the import is all done
  * file.count : filled with the current line nr.
  * file.errors : filled rows you send to log_error()
  * file.log : filled with comments you placed in log
 
+The export process makes the exact same files, but the count is only
+written when the process is complete
+
+The log file is always filled with a start and end date which is
+written before the before_[import|export] callback methods and after
+the after_[import|export] callback methods
 
 
 Copyright (c) 2009 Hartog C. de Mik, released under the MIT license

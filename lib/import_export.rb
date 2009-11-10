@@ -41,8 +41,10 @@ module ImportExport
       }
 
       # some defaults
-      @col_sep  ||= ";"
-      @row_sep  ||= "\r\n"
+      @col_sep ||= ";"
+      @row_sep ||= "\r\n"
+      @@before ||= nil;
+      @@after  ||= nil;
     end
 
     
@@ -90,7 +92,7 @@ module ImportExport
   # 
   # subclasses are expected to implement the 'import' method
   #
-  class Import < ImportExport
+  class Importer < ImportExport
     attr_accessor :use_headers
 
     def initialize(*args)
@@ -102,9 +104,9 @@ module ImportExport
     # perform the import
     def perform
       throw "No file to import" unless @file
-      counter = 0
 
-      @@before ||= nil; @@after ||= nil;
+      counter    = 0
+      count_file = "#{@file}.count"
 
       log "Started import on " + Time.now.asctime + "\r\n"
 
@@ -125,14 +127,19 @@ module ImportExport
         FasterCSV.foreach(@file, options) { |row|
           self.import(row)
 
-          # quickly write the count to the count file every 10th iteration
+          # quickly write the count to the count file every 5th iteration
           File.open(count_file, File::TRUNC|File::CREAT|File::WRONLY) {|f|
-            f.write( (counter += 1).to_s + "\n" )
-          } unless counter % 10
+            f.write( counter.to_s + "\n" )
+          } if ( ( counter += 1 ) % 5 == 0 )
 
           
         } #/ fasterCSV
       } #/ transaction
+
+      # write the final count
+      File.open(count_file, File::TRUNC|File::CREAT|File::WRONLY) {|f|
+	f.write( counter.to_s + "\n" )
+      }
 
       @@after.each { |method| self.send(method) } if @@after
 
@@ -140,15 +147,9 @@ module ImportExport
 
       # close the door after you
       close_logs
-      count_file.close
-      
-      # write a done file
-      File.open("#{@file}.done", "wb") { |f|
-        f.write Time.now.asctime
-      }
     end
 
-    
+    alias :run :perform
   end
 
   # Generic export class.
@@ -158,7 +159,7 @@ module ImportExport
   #
   # If the subclass has a headers method that will be added first
   #
-  class Export < ImportExport
+  class Exporter < ImportExport
     attr_accessor :objects, :tmp_file
 
     def initialize(*args)
@@ -197,8 +198,6 @@ module ImportExport
         throw "Objects is not an array"
       end
 
-      @@before ||= nil; @@after ||= nil;
-
       log "Started export on " + Time.now.asctime
  
       @@before.each { |method| self.send(method) } if @@before
@@ -208,9 +207,11 @@ module ImportExport
         :row_sep => @row_sep
       }
 
+      counter = 0
       FasterCSV.open( @file, "w+", options ) { |csv|
         if self.respond_to?("header")
           csv << self.header
+	  counter += 1
         end
 
         @objects.each { |object|
@@ -219,8 +220,14 @@ module ImportExport
           values.collect! { |i| i.nil? ? "" : i }
 
           csv << values
+	  counter += 1
         } #/ customers
       } #/ csv
+
+      # write the final count
+      File.open("#{@file}.count", File::TRUNC|File::CREAT|File::WRONLY) {|f|
+	f.write( counter.to_s + "\n" )
+      }
 
       @@after.each { |method| self.send(method) } if @@after
 
