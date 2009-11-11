@@ -65,7 +65,7 @@ module ImportExport
         @error_file = File.open("#{@file}.errors", "wb")
         @error_file.sync = true
 
-	if row.respond_to?(:headers)
+	      if row.respond_to?(:headers)
           @error_file.write row.headers.to_csv(
             :col_sep => @col_sep,
             :row_sep => @row_sep
@@ -138,7 +138,7 @@ module ImportExport
 
       # write the final count
       File.open(count_file, File::TRUNC|File::CREAT|File::WRONLY) {|f|
-	f.write( counter.to_s + "\n" )
+	      f.write( counter.to_s + "\n" )
       }
 
       @@after.each { |method| self.send(method) } if @@after
@@ -208,25 +208,28 @@ module ImportExport
       }
 
       counter = 0
-      FasterCSV.open( @file, "w+", options ) { |csv|
-        if self.respond_to?("header")
-          csv << self.header
-	  counter += 1
-        end
+      ActiveRecord::Base.transaction {
+        FasterCSV.open( @file, "w+", options ) { |csv|
+          if self.respond_to?("header")
+            csv << self.header
+            counter += 1
+          end
 
-        @objects.each { |object|
-          values = self.export(object)
-          # make sure the nil values are ""
-          values.collect! { |i| i.nil? ? "" : i }
+          @objects.each { |object|
+            if values = self.export(object)
+              # make sure the nil values are ""
+              values.collect! { |i| i.nil? ? "" : i }
 
-          csv << values
-	  counter += 1
-        } #/ customers
-      } #/ csv
+              csv << values
+              counter += 1
+            end
+          } #/ customers
+        } #/ csv
+      } #/ transaction
 
       # write the final count
       File.open("#{@file}.count", File::TRUNC|File::CREAT|File::WRONLY) {|f|
-	f.write( counter.to_s + "\n" )
+	      f.write( counter.to_s + "\n" )
       }
 
       @@after.each { |method| self.send(method) } if @@after

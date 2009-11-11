@@ -13,44 +13,52 @@ h2. Install
 @./script/plugin install git://github.com/coffeeaddict/import-export.git@
 
 
+h2. Transactional
+
+Both the import and the export are done under a transaction. If really bad
+things happen, the changes already made to the database will be rolled back.
+
+Even for an export this is usefull; you might want to set flags telling the
+system the object was exported
+
+
 h2. Example Import 
 
 To make a thingy that imports cards:
 
-in @lib/cards_import.rb@
+in @lib/imports.rb@
 
-bc.. include ImportExport
+bc..  module Imports
 
-  class CardsImport < Importer
-    def import(row)
+    include ImportExport
+
+    class CardsImport
+      def import(row)
   
-      # Card is an ActiveRecord
-      card = Card.new
+        # Card is an ActiveRecord
+        card = Card.new
   
-      row.headers.each { |name|
-        # lets assume the header matches the names of Card's attributes
-        attr_name = name.downcase.gsub(/\s/, "_")
+        row.headers.each { |name|
+	  # lets assume the header matches the names of Card's attributes
+          attr_name = name.downcase.gsub(/\s/, "_")
   
-        card[attr_name] = row.field(name)
-      }
+          card[attr_name] = row.field(name)
+        }
    
-      card.save
+        card.save
   
-      if card.invalid?
-        # writes the row to "file.csv.errors"
-        log_error row
-      else
-        # writes the message to "file.csv.log"
-        log card.name + " saved"
+        if card.invalid?
+          # writes the row to "file.csv.errors"
+          log_error row
+        else
+          # writes the message to "file.csv.log"
+          log card.name + " saved"
+        end
       end
     end
   end
 
-
-
-
-
-p. In your controller:
+In your controller:
 
 bc.  include Imports
   ...
@@ -63,9 +71,6 @@ Or for Delayed::Job (who needs imports right away?)
 
 run is an alias for perform, so this will work out of the box
 
-The ImportExport module publishes the Importer (abstract) class into
-your name space.
-
 
 h2. Example Export 
 
@@ -75,7 +80,7 @@ in @app/model/cards_exports.rb@
 
 bc..   include ImportExport
   
-  class CardsExport < Exporter
+  class CardsExport < Export
     before_export :setup
     after_export :extra_info
   
@@ -93,20 +98,19 @@ bc..   include ImportExport
     end
   
     def export(card)
+      # the row will not be in the export
+      return nil if non_fatal_error_occured
+
+      # the row will be in the export
       return card.attributes.values_at("name", "image", "color")
     end
   end
+  
 
+in your controller
 
-
-
-
-
-
-p. in your controller:
-
-bc.   include Exports
-  ...
+bc..   include Exports
+  
   # export all sold out cards
   export = CardsExport.new( :col_sep => '|', :file => "sold_out" )
   export.collect { Cards.find(:all, :conditions => [ "sold_out=?", true ]) }
@@ -116,16 +120,13 @@ This will make file named sold_out.csv in @RAILS_ROOT/tmp@.
 
 Or perhaps even simpler
 
-bc.   export = CardsExport.new( :file => "all" ) { Cards.all }
+bc..   export = CardsExport.new( :file => "all" ) { Cards.all }
   export.run
 
 
 To send the file to the user, just
 
 @return send_file(export.file, :type => "text/csv")@
-
-The ImportExport module publishes the Importer (abstract) class into
-your name space.
 
 
 h2. Options
@@ -137,6 +138,10 @@ h2. Options
 h3. Import specific options
 
  * @:use_headers@ => Flag to use the first row as a header. The contents of the first row will not be included in the import.
+
+h3. Export specific options
+
+No specific options, but some quirks exist
 
 
 h2. Extra files
@@ -154,7 +159,5 @@ The log file is always filled with a start and end date which is
 written before the before_[import|export] callback methods and after
 the after_[import|export] callback methods
 
-
-h2. Author, license and notices
 
 Copyright (c) 2009 Hartog C. de Mik, released under the MIT license
