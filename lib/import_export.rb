@@ -6,16 +6,14 @@ module ImportExport
   # a very simple and subtle callback mechanism that could potentially
   # blow up
 
-  def before_export(what)
-    @@before ||= []
-    @@before << what
+  def before_export(*what)
+    @@before = what
   end
 
   alias :before_import :before_export
 
-  def after_export(what)
-    @@after ||= []
-    @@after << what
+  def after_export(*what)
+    @@after = what
   end
 
   alias :after_import :after_export
@@ -40,9 +38,12 @@ module ImportExport
         self.send(key.to_s + "=", options[key]) if self.respond_to? key
       }
 
-      # some defaults
-      @col_sep ||= ";"
-      @row_sep ||= "\r\n"
+      # some defaults for FasterCSV
+      @col_sep      ||= ";"
+      @row_sep      ||= "\r\n"
+      @force_quotes ||= false
+
+      # make sure before and after are nillified
       @@before ||= nil;
       @@after  ||= nil;
     end
@@ -55,7 +56,7 @@ module ImportExport
         @log_file.sync = true
       end
 
-      message += "\n" if message[-1] != 10
+      message += @row_sep if message.last != "\n"
       @log_file.write message
     end
 
@@ -67,16 +68,18 @@ module ImportExport
 
 	      if row.respond_to?(:headers)
           @error_file.write row.headers.to_csv(
-            :col_sep => @col_sep,
-            :row_sep => @row_sep
+            :col_sep      => @col_sep,
+            :row_sep      => @row_sep,
+            :force_quotes => @force_quotes
           )
         end
      
       end
 
       @error_file.write row.to_csv(
-        :col_sep => @col_sep,
-        :row_sep => @row_sep
+        :force_quotes => @force_quotes,
+        :col_sep      => @col_sep,
+        :row_sep      => @row_sep
       )
     end
 
@@ -111,37 +114,48 @@ module ImportExport
       log "Started import on " + Time.now.asctime + "\r\n"
 
       # run callback
-      @@before.each { |method| self.send(method) } if @@before
+      @@before.each { |method|
+        self.send(method) if self.respond_to?(method)
+      } if @@before
 
       # form an options hash
       options = {
-        :col_sep        => @col_sep,
+        :col_sep      => @col_sep,
+        :force_quotes => @force_quotes
       }
       if @use_headers == true
         options[:headers] = :first_row
         options[:return_headers] = false
       end
 
-      # make sure the import fails if things go bad
-      ActiveRecord::Base.transaction {
-        FasterCSV.foreach(@file, options) { |row|
-          self.import(row)
+      begin
+        # make sure the import fails if things go bad
+        ActiveRecord::Base.transaction {
+          FasterCSV.foreach(@file, options) { |row|
+            self.import(row)
 
-          # quickly write the count to the count file every 5th iteration
-          File.open(count_file, File::TRUNC|File::CREAT|File::WRONLY) {|f|
-            f.write( counter.to_s + "\n" )
-          } if ( ( counter += 1 ) % 5 == 0 )
+            # quickly write the count to the count file every 5th iteration
+            File.open(count_file, File::TRUNC|File::CREAT|File::WRONLY) {|f|
+              f.write( counter.to_s + "\n" )
+            } if ( ( counter += 1 ) % 5 == 0 )
 
-          
-        } #/ fasterCSV
-      } #/ transaction
 
+          } #/ fasterCSV
+        } #/ transaction
+      rescue Exception => ex
+        log "Import aborted: " + ex.message
+        log ex.backtrace.join("\n")
+        log_error ["The entire import failed. please see log for more info."]
+      end
+      
       # write the final count
       File.open(count_file, File::TRUNC|File::CREAT|File::WRONLY) {|f|
 	      f.write( counter.to_s + "\n" )
       }
 
-      @@after.each { |method| self.send(method) } if @@after
+      @@after.each { |method|
+        self.send(method) if self.respond_to?(method)
+      } if @@after
 
       log "Completed import on " + Time.now.asctime + "\r\n"
 
@@ -200,39 +214,50 @@ module ImportExport
 
       log "Started export on " + Time.now.asctime
  
-      @@before.each { |method| self.send(method) } if @@before
+      @@before.each { |method|
+        self.send(method) if self.respond_to?(method)
+      } if @@before
 
       options = {
-        :col_sep => @col_sep,
-        :row_sep => @row_sep
+        :col_sep      => @col_sep,
+        :row_sep      => @row_sep,
+        :force_quotes => @force_quotes
       }
 
       counter = 0
-      ActiveRecord::Base.transaction {
-        FasterCSV.open( @file, "w+", options ) { |csv|
-          if self.respond_to?("header")
-            csv << self.header
-            counter += 1
-          end
-
-          @objects.each { |object|
-            if values = self.export(object)
-              # make sure the nil values are ""
-              values.collect! { |i| i.nil? ? "" : i }
-
-              csv << values
+      begin
+        ActiveRecord::Base.transaction {
+          FasterCSV.open( @file, "w+", options ) { |csv|
+            if self.respond_to?("header")
+              csv << self.header
               counter += 1
             end
-          } #/ customers
-        } #/ csv
-      } #/ transaction
+
+            @objects.each { |object|
+              if values = self.export(object)
+                # make sure the nil values are ""
+                values.collect! { |i| i.nil? ? "" : i }
+
+                csv << values
+                counter += 1
+              end
+            } #/ customers
+          } #/ csv
+        } #/ transaction
+      rescue Exception => ex
+        log "Export aborted: " + ex.message
+        log ex.backtrace.join("\n")
+        log_error ["the entire export failed. please see log for more info."]
+      end
 
       # write the final count
       File.open("#{@file}.count", File::TRUNC|File::CREAT|File::WRONLY) {|f|
 	      f.write( counter.to_s + "\n" )
       }
 
-      @@after.each { |method| self.send(method) } if @@after
+      @@after.each { |method|
+        self.send(method) if self.respond_to?(method)
+      } if @@after
 
       log "Completed export on " + Time.now.asctime
 
