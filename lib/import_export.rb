@@ -3,21 +3,6 @@ module ImportExport
   require 'fastercsv'
   require 'ftools'
 
-  # a very simple and subtle callback mechanism that could potentially
-  # blow up
-
-  def before_export(*what)
-    @@before = what
-  end
-
-  alias :before_import :before_export
-
-  def after_export(*what)
-    @@after = what
-  end
-
-  alias :after_import :after_export
-
   # a base class for both imports and exports.
   class ImportExport
     attr_accessor :col_sep, :row_sep, :file
@@ -42,10 +27,6 @@ module ImportExport
       @col_sep      ||= ";"
       @row_sep      ||= "\r\n"
       @force_quotes ||= false
-
-      # make sure before and after are nillified
-      @@before ||= nil;
-      @@after  ||= nil;
     end
 
     
@@ -114,9 +95,7 @@ module ImportExport
       log "Started import on " + Time.now.asctime + "\r\n"
 
       # run callback
-      @@before.each { |method|
-        self.send(method) if self.respond_to?(method)
-      } if @@before
+      self.before_import if self.respond_to?(:before_import)
 
       # form an options hash
       options = {
@@ -153,9 +132,7 @@ module ImportExport
 	      f.write( counter.to_s + "\n" )
       }
 
-      @@after.each { |method|
-        self.send(method) if self.respond_to?(method)
-      } if @@after
+      self.after_import if self.respond_to?(:after_import)
 
       log "Completed import on " + Time.now.asctime + "\r\n"
 
@@ -213,10 +190,8 @@ module ImportExport
       end
 
       log "Started export on " + Time.now.asctime
- 
-      @@before.each { |method|
-        self.send(method) if self.respond_to?(method)
-      } if @@before
+
+      self.before_export if self.respond_to?(:before_export)
 
       options = {
         :col_sep      => @col_sep,
@@ -255,9 +230,7 @@ module ImportExport
 	      f.write( counter.to_s + "\n" )
       }
 
-      @@after.each { |method|
-        self.send(method) if self.respond_to?(method)
-      } if @@after
+      self.after_export if self.respond_to?(:after_export)
 
       log "Completed export on " + Time.now.asctime
 

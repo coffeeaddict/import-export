@@ -1,0 +1,157 @@
+ImportExport
+
+
+  A generic import and export plugin for rails, own implementation is
+  required
+
+Dependencies
+
+  * FasterCSV
+
+
+Install
+
+  ./script/plugin install git://github.com/coffeeaddict/import-export.git
+
+
+Transactional
+
+  Both the import and the export are done under a transaction. If
+  really bad things happen, the changes already made to the database
+  will be rolled back.
+
+  Even for an export this is usefull; you might want to set flags
+  telling the system the object was exported
+
+
+Example Import 
+
+  To make a thingy that imports cards:
+
+  in lib/cards_import.rb
+
+    include ImportExport
+    class CardsImport < Importer
+      def import(row)
+  
+        # Card is an ActiveRecord
+        card = Card.new
+  
+        row.headers.each { |name|
+          # lets assume the header matches the names of Card's attributes
+          attr_name = name.downcase.gsub(/\s/, "_")
+  
+          card[attr_name] = row.field(name)
+        }
+   
+        card.save
+  
+        if card.invalid?
+          # writes the row to "file.csv.errors"
+          log_error row
+        else
+          # writes the message to "file.csv.log"
+          log card.name + " saved"
+        end
+      end
+    end
+
+  In your controller:
+
+    import = CardsImport.new('/path/to/file.csv')
+    import.run
+
+  Or for Delayed::Job (who needs imports right away?)
+
+    Delayed::Job.enqueue CardsImport.new('/path/to/file.csv')
+
+  run is an alias for perform, so this will work out of the box
+
+
+Example Export 
+
+  To make something export
+
+  in app/model/cards_exports.rb
+
+    include ImportExport
+  
+    class CardsExport < Exporter
+      def before_export 
+        @col_sep = ","
+        @row_sep = "\n"
+      end
+  
+      def after_export
+        log "stuff has been exported"
+      end
+  
+      # this will make a nice header, if self.respond_to?
+      def header
+        [ "NAME", "IMAGE", "COLOR" ]
+      end
+  
+      def export(card)
+        # the row will not be in the export
+        return nil if non_fatal_error_occured
+
+        # the row will be in the export
+        return card.attributes.values_at("name", "image", "color")
+      end
+    end
+  
+
+  in your controller
+ 
+    # export all sold out cards
+    export = CardsExport.new( :col_sep => '|', :file => "sold_out" )
+    export.collect { Cards.find(:all, :conditions => [ "sold_out=?", true ]) }
+    export.run
+
+  This will make file named sold_out.csv in @RAILS_ROOT/tmp@.
+
+  Or perhaps even simpler
+
+    export = CardsExport.new( :file => "all" ) { Cards.all }
+    export.run
+
+  To send the file to the user, just
+
+    return send_file(export.file, :type => "text/csv")
+
+
+Options
+
+ * :col_sep      => The column seperator, defaults to ";"
+ * :row_sep      => The row seperator, defaults to "\r\n"
+ * :file         => The name of the file import / export
+ * :force_quotes => 
+
+Import specific options
+
+ * :use_headers => Flag to use the first row as a header. The contents
+                   of the first row will not be included in the import.
+
+Export specific options
+
+  No specific options, but some quirks exist
+
+
+Extra files
+
+  The import process makes a number of files next to the actual data file
+
+  * file.count  : filled with the current line nr.
+  * file.errors : filled rows you send to log_error()
+  * file.log    : filled with comments you placed in log
+
+  The export process makes the exact same files, but the count is only
+  written when the process is complete
+
+  The log file is always filled with a start and end date which is
+  written before the before_[import|export] callback methods and after
+  the after_[import|export] callback methods
+
+
+
+Copyright (c) 2009 Hartog C. de Mik, released under the MIT license
